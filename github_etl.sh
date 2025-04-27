@@ -34,8 +34,14 @@ echo "Data Successfully fathed into $OUTPUT_FILE"
 # --- Parse commits and insert into DB (MySQL example) ---
 LATEST_COMMIT_DATE=$(jq -r '.[0].commit.author.date' "$OUTPUT_FILE")
 
-# Loop through commits and insert into MySQL
 
+if [ ! -s "$OUTPUT_FILE" ]; then
+  echo "⚠️ Warning: No new commits found."
+  exit 0
+fi
+
+
+# Loop through commits and insert into MySQL
 while IFS=',' read -r sha author date; do
   # If date is valid, use it, otherwise set to NULL
   # if [[ $date =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
@@ -57,7 +63,10 @@ while IFS=',' read -r sha author date; do
   if [ "$exists" -eq 0 ]; then
     # Only insert if not already present
     mysql -u "$DB_USER" -p"$DB_PASSWORD" -D "$DB_NAME" -e \
-      "INSERT INTO commits (commit_sha, author_name, commit_date) VALUES ('$sha', '$author', '$date');"
+      "INSERT INTO commits (commit_sha, author_name, commit_date) VALUES ('$sha', '$author', '$date');"|| {
+  echo "❌ Error: Failed to insert commit $sha into database."
+  exit 5
+}
   else
     echo "Commit $sha already exists. Skipping insert."
   fi
@@ -72,3 +81,5 @@ fi
 echo "$LATEST_COMMIT_DATE" > "$LAST_TIMESTAMP_FILE"
 
 echo "ETL process completed. Last timestamp updated."
+echo "$(date '+%Y-%m-%d %H:%M:%S') - Successfully fetched and inserted new commits!" >> pipeline.log
+rm -f "$OUTPUT_FILE"
